@@ -1,5 +1,5 @@
 if !has("python3")
-    echo "vim needs to be compiled with +python3 to use spock"
+    print "vim needs to be compiled with +python3 to use spock"
 endif
 
 if exists('g:spock_initialized')
@@ -30,6 +30,18 @@ spock.prev()
 endpy
 endfunction
 
+function! spock#volume_up() abort
+python3 << endpy
+spock.volume_up()
+endpy
+endfunction
+
+function! spock#volume_down() abort
+python3 << endpy
+spock.volume_down()
+endpy
+endfunction
+
 function! spock#volume(level) abort
 python3 << endpy
 spock.volume(int(vim.eval('a:level')))
@@ -49,8 +61,8 @@ endpy
 endfunction
 
 function! spock#devices() abort
-    if exists('s:dev_view') && bufloaded(s:dev_view)
-        exec s:dev_view.'bd!'
+    if exists('s:view') && bufloaded(s:view)
+        exec s:view.'bd!'
     endif
     silent pedit [Spock] Devices
 
@@ -58,7 +70,7 @@ function! spock#devices() abort
 
     resize 10
 
-    let s:dev_view = bufnr('%')
+    let s:view = bufnr('%')
 
     set modifiable
 
@@ -75,7 +87,7 @@ def select():
     if i >= 0 and i < len(devices):
         spock.use_device(devices[i])
         vim.command(':bd!')
-        echo(f'Switching to device {devices[i].name} on {devices[i].type}')
+        print(f'Switching to device {devices[i].name} on {devices[i].type}')
 endpy
 
     setl buftype=nofile
@@ -100,9 +112,9 @@ function! spock#device(devname) abort
 python3 << endpy
 dev = spock.use_device(vim.eval('a:devname'))
 if dev:
-    echo(f'Switching to device {dev.name} on {dev.type}')
+    print(f'Switching to device {dev.name} on {dev.type}')
 else:
-    echo(f"No device found for query '{devname}'")
+    print(f"No device found for query '{devname}'")
 endpy
 endfunction
 
@@ -127,10 +139,91 @@ if argc >= 5:
         p = True
 playing = spock.play(vim.eval('a:query'), l, a, b, t, p)
 if playing:
-    echo(f'Now playing {get_track_info_string(playing)}')
+    print(f'Now playing {get_track_info_string(playing)}')
 else:
-    echo(f'No results found for query {query}')
+    print(f'No results found for query {query}')
 endpy
+endfunction
+
+function! spock#explore(query, ...) abort
+    if exists('s:view') && bufloaded(s:view)
+        exec s:view.'bd!'
+    endif
+    silent pedit [Spock] Devices
+
+    wincmd P | wincmd J
+
+    resize 20
+
+    let s:view = bufnr('%')
+
+    set modifiable
+
+python3 << endpy
+argc = int(vim.eval('a:0'))
+l,a,b,t,p = False,False,False,False,False
+if argc >= 1:
+    if int(vim.eval('a:1')):
+        l = True
+if argc >= 2:
+    if int(vim.eval('a:2')):
+        a = True
+if argc >= 3:
+    if int(vim.eval('a:3')):
+        b = True
+if argc >= 4:
+    if int(vim.eval('a:4')):
+        t = True
+if argc >= 5:
+    if int(vim.eval('a:5')):
+        p = True
+results = spock.get_search_results(vim.eval('a:query'), l, a, b, t, p)
+
+vim.current.buffer[0]  =  '  Search Results  '
+vim.current.buffer.append('==================')
+vim.current.buffer.append('')
+line = 4
+
+line_to_object = {}
+
+for t, items in results.items():
+    if items:
+        vim.current.buffer.append(t.capitalize() + 's')
+        vim.current.buffer.append('-' * (len(t) + 1))
+        line += 2
+
+        for i in items:
+            vim.current.buffer.append(get_track_info_string(i))
+            line_to_object[line] = i
+            line += 1
+        vim.current.buffer.append('')
+        line += 1
+
+def select():
+    i = vim.current.window.cursor[0]
+    if i in line_to_object:
+        playing = spock.play_object(line_to_object[i])
+        if playing:
+            print(f'Now playing {get_track_info_string(playing)}')
+        vim.command(':bd!')
+endpy
+
+    setl buftype=nofile
+    setl noswapfile
+    set bufhidden=wipe
+
+    setl cursorline
+    setl nonu
+    setl ro
+    setl noma
+
+    if (exists('&relativenumber')) | setl norelativenumber | endif
+
+    setl ft=spock
+
+    nnoremap <silent> <buffer> <CR> :python3 select()<CR>
+
+    exec ':2'
 endfunction
 
 function! spock#status() abort
